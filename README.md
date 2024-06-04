@@ -15,7 +15,17 @@ The SfM pipeline involves the following steps:
 7. **Plotting**: The code has 3 different functions in the plotter class to visualize the point cloud using different libraries. The current implementation uses Open3D which can be easily changed.
 
 ## Results
-![Alt text](initial_pcl_with_camera_poses.png?raw=true "Title")
+The images can be found in ./buddha_images folder. Reference image below:
+![Alt text](buddha_images/buddha_006.png?raw=true "BuddhaImage")
+
+
+Initial (un-optimized) point cloud with camera poses (red).
+![Alt text](initial_pcl_with_camera_poses.png?raw=true "Initial_pcl_with_cam_poses")
+Left - Front View; Right - Top View (for better visualization of camera poses)
+
+Optimized point cloud with camera poses (red).
+![Alt text](optimized_pcl_with_camera_poses.png?raw=true "Initial_pcl_with_cam_poses")
+Left - Front View; Right - Top View (for better visualization of camera poses)
 
 ## Requirements
 
