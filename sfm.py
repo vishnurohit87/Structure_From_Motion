@@ -3,12 +3,11 @@
 import cv2
 import numpy as np
 import matplotlib.pyplot as plt
+import open3d as o3d
+from mpl_toolkits.mplot3d.art3d import Poly3DCollection
 import os
-import math
 import plotly.graph_objects as go
 import gtsam
-import gtsam.utils.plot as gtsam_plot
-from gtsam import symbol_shorthand
 from gtsam import (Cal3_S2, GenericProjectionFactorCal3_S2, NonlinearFactorGraph, SfmTrack, noiseModel,
                 PinholeCameraCal3_S2, Point2, Point3, Pose3, PriorFactorPoint3, PriorFactorPose3, Values)
 
@@ -22,17 +21,20 @@ class sfm_helpers:
         '''
         Reads and stores images in an array
         '''
+        print(f"Loading images from {self.path}....")
         ims = [cv2.imread(os.path.join(self.path,file)) for file in sorted(os.listdir(self.path))]
         self.height, self.width, _ = ims[0].shape
         self.K = np.array([[1500, 0, self.width/2], [0, 1500, self.height/2], [0, 0, 1]])
         clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
         images = [clahe.apply(cv2.convertScaleAbs(cv2.cvtColor(img, cv2.COLOR_BGR2GRAY))) for img in ims]
+        print(f"Images loaded successfully!")
         
-        fig, axs = plt.subplots(1, len(images), figsize=(24, 8))
-        for i in range(len(images)):
-            axs[i].imshow(images[i])  # Convert BGR to RGB
-            axs[i].set_title(f'Image {i+1}')
-            axs[i].axis('off')  # Turn off axis labels
+        if self.viz:
+            fig, axs = plt.subplots(1, len(images), figsize=(24, 8))
+            for i in range(len(images)):
+                axs[i].imshow(images[i])  # Convert BGR to RGB
+                axs[i].set_title(f'Image {i+1}')
+                axs[i].axis('off')  # Turn off axis labels
         return images
     
     def findAndMatchFeatures(self, image1, image2, features):
@@ -91,17 +93,6 @@ class sfm_helpers:
         inlier_dst_pts = dst_pts[mask.ravel() == 1]
 
         return E, inlier_src_pts, inlier_dst_pts
-
-    def posesFromE_temp(self, E, q1, q2):
-        # Get the rotation and translation matrix using opencv
-        _, R, t, mask = cv2.recoverPose(E, q1, q2, self.K)
-
-        # Further refine points using the mask. (This mask remove points which fail the chirality test)
-        mask = np.squeeze(mask != 0)
-        q1 = q1[mask.ravel() == 1]
-        q2 = q2[mask.ravel() == 1]
-
-        return q1, q2, R, t
     
     def posesFromE(self, E, img1_pts, img2_pts):   # For some reason this works better than recoverPose so kept this
 
@@ -218,25 +209,7 @@ class point_cloud:
 
         print(f"Number of tracks: {len(self.tracks)}")
         return self.tracks
-    
-    def addPoints_match3d(self, pts_3d, img1_pts, img2_pts, pose_idx1, pose_idx2):
-        for P3d, img1_pt, img2_pt in zip(pts_3d, img1_pts, img2_pts):
-            if tuple(P3d) not in self.tracks:
-                self.tracks[tuple(P3d)] = [(pose_idx1, tuple(img1_pt)), (pose_idx2, tuple(img2_pt))]
-            else:
-                print("Track already exists\nPose,Img:",[(pose_idx1, tuple(img1_pt)),(pose_idx2, tuple(img2_pt))])
-                print("TRACK: ", self.tracks[tuple(P3d)])
-                if (pose_idx1, tuple(img1_pt)) not in self.tracks[tuple(P3d)]:
-                    self.tracks[tuple(P3d)].append((pose_idx1, tuple(img1_pt)))
-                    print("Added measurement to existing track")
-
-                if (pose_idx2, tuple(img2_pt)) not in self.tracks[tuple(P3d)]:
-                    self.tracks[tuple(P3d)].append((pose_idx2, tuple(img2_pt)))
-                    print("Added measurement to existing track")
         
-        print(f"Number of tracks: {len(self.tracks)}")
-        return self.tracks
-    
     def common_pts(self, img1_pts, img2_pts):
         '''
         Returns lists of 3d points and their corresponding
@@ -324,42 +297,140 @@ class point_cloud:
 
         for point in filtered_points_3d:
             del self.tracks[tuple(point)]
-
-    
-    def plot_3d(self, points_3d, poses, filter):
-        # Plot 3D points
-
-        # Convert the optimized points to a numpy array for easier filtering
-        points_3d = np.array(points_3d)
+   
+class plotter:
+    def __init__(self, points_3d, poses, filter):
+        self.points_3d = np.array(points_3d)
+        self.poses = poses
+        self.filter = filter
 
         # Filter out points with any coordinate beyond 10,000
-        filtered_points_3d = points_3d[
-            (np.abs(points_3d) <= filter).all(axis=1)
-        ]
+        filtered_points_3d = self.points_3d[(np.abs(self.points_3d) <= filter).all(axis=1)]
+        self.points_3d = filtered_points_3d
+        
+    def plot_3d_go(self):
+        '''
+        Uses Plotly to plot the 3D points and camera poses in a 3D plot
+        '''
         total_colors = np.zeros((1, 3))
-        x = filtered_points_3d[:, 0]
-        y = filtered_points_3d[:, 1]
-        z = filtered_points_3d[:, 2]
+        x = self.points_3d[:, 0]
+        y = self.points_3d[:, 1]
+        z = self.points_3d[:, 2]
 
         fig = go.Figure()
 
         scatter = fig.add_trace(go.Scatter3d(x=x, y=y, z=z, mode='markers', marker=dict(size=1.2, color=total_colors/255)))
 
         # Plot camera poses
-        for i in range(len(poses)):
-            pose = poses[i]
+        for i in range(len(self.poses)):
+            pose = self.poses[i]
             x, y, z = pose[0:3, 3]
             u, v, w = pose[0:3, 0:3] @ np.array([0, 0, 1])
             fig.add_trace(go.Scatter3d(x=[x], y=[y], z=[z], mode='markers', marker=dict(size=3, color='red')))
-            # fig.add_trace(go.Scatter3d(x=[x, x+u], y=[y, y+v], z=[z, z+w], mode='markers', marker=dict(size=1.2, color='red')))
-
-        # fig.update_layout(scene=dict(
-        #     xaxis=dict(range=[-1265, 1495]),
-        #     yaxis=dict(range=[-2440, 1640]),
-        #     zaxis=dict(range=[-100, 4000])
-        # ))
 
         fig.show()
+
+    def plot_3d_plt(self):
+        '''
+        Uses Matplotlib to plot the 3D points and camera poses in a 3D plot
+        '''
+        def plot_camera(ax, R, t, scale=1):
+            # Define the camera pyramid vertices in camera coordinate system
+            camera_body = np.array([
+                [0, 0, 0],  # Camera center
+                [1, 1, 2],  # Top-right corner
+                [1, -1, 2],  # Bottom-right corner
+                [-1, -1, 2],  # Bottom-left corner
+                [-1, 1, 2]  # Top-left corner
+            ]) * scale
+            
+            # Transform camera body to world coordinate system
+            camera_body = (R @ camera_body.T).T + t
+            
+            # Define the six faces of the camera pyramid
+            verts = [
+                [camera_body[0], camera_body[1], camera_body[2]],  # Side 1
+                [camera_body[0], camera_body[2], camera_body[3]],  # Side 2
+                [camera_body[0], camera_body[3], camera_body[4]],  # Side 3
+                [camera_body[0], camera_body[4], camera_body[1]],  # Side 4
+                [camera_body[1], camera_body[2], camera_body[3], camera_body[4]]  # Base
+            ]
+
+            ax.add_collection3d(Poly3DCollection(verts, color='brown', alpha=0.5))
+
+        # Create a 3D plot
+        fig = plt.figure()
+        ax = fig.add_subplot(111, projection='3d')
+
+        # Plot the 3D points
+        ax.scatter(self.points_3d[:, 0], self.points_3d[:, 1], self.points_3d[:, 2], c='black', s=1)
+
+        # Plot camera poses
+        for pose in self.poses:
+            # Extract the rotation and translation from the pose
+            R = pose[:3, :3]
+            t = pose[:3, 3]
+            
+            # Plot the camera with orientation
+            plot_camera(ax, R, t)
+
+        ax.set_xlabel('X')
+        ax.set_ylabel('Y')
+        ax.set_zlabel('Z')
+        plt.show()
+
+    def plot_3d_o3d(self, point_size=2, save=None):
+        '''
+        Uses Open3D to plot the 3D points and camera poses in a 3D plot
+        '''
+
+        # Create an Open3D point cloud object and negate y and z coordinates since image and world coordinates are different
+        negated_points_3d = self.points_3d.copy()
+        negated_points_3d[:, 1] = -negated_points_3d[:, 1]
+        negated_points_3d[:, 2] = -negated_points_3d[:, 2]
+
+        point_cloud = o3d.geometry.PointCloud()
+        point_cloud.points = o3d.utility.Vector3dVector(negated_points_3d)
+        point_cloud.paint_uniform_color([0, 0, 0])  # Color all points black
+
+        # Create a list to store camera spheres
+        camera_spheres = []
+
+        # Add camera poses as spheres and negate y and z coordinates
+        for pose in self.poses:
+            # Extract the translation from the pose
+            t = pose[:3, 3]
+
+            # Negate y and z coordinates in the translation vector
+            t_negated = t.copy()
+            t_negated[1] = -t_negated[1]
+            t_negated[2] = -t_negated[2]
+
+            # Create a sphere to represent the camera position
+            sphere = o3d.geometry.TriangleMesh.create_sphere(radius=1)
+            sphere.translate(t_negated)
+            sphere.paint_uniform_color([1, 0, 0])  # Color the spheres red
+            camera_spheres.append(sphere)
+
+        # Create a visualizer and add geometry
+        vis = o3d.visualization.Visualizer()
+        vis.create_window()
+        vis.add_geometry(point_cloud)
+        for camera_sphere in camera_spheres:
+            vis.add_geometry(camera_sphere)
+
+        # Adjust the point size in the rendering options
+        render_option = vis.get_render_option()
+        render_option.point_size = point_size
+
+        if save is not None:
+            # Save the point cloud to a file
+            o3d.io.write_point_cloud(save, point_cloud)
+            print(f"Point cloud saved as {save}")
+
+        # Run the visualizer
+        vis.run()
+        vis.destroy_window()
 
 class gtsam_optimizer:
     def __init__(self, pc, K):
@@ -425,27 +496,38 @@ class gtsam_optimizer:
         return result
 
 def main():
-    sfmh = sfm_helpers("buddha_images", True)
+    sfmh = sfm_helpers("buddha_images", False)
     images = sfmh.getImages()
-    print(f"Number of images: {len(images)}")
-
+    
+    '''
+    INITIAL TRIANGULATION
+    '''
     pc = point_cloud()
     pc.camera_poses.append(np.eye(4)) # First camera pose is origin
     pc.gtsam_camera_poses.append(np.linalg.inv(pc.camera_poses[0]))
 
+    print(f"Number of images = {len(images)}")
+    print("\nStarting initial triangulation....")
     for i in range(len(images)-1):
-        print(f"\n\nidx = {i}")
-        src_pts, dst_pts, good_matches = sfmh.findAndMatchFeatures(images[i], images[i+1])
+        print(f"\nidx = {i}")
+        if i==0:
+            src_pts, dst_pts, good_matches = sfmh.findAndMatchFeatures(images[i], images[i+1], 1000)
+        else:
+            src_pts, dst_pts, good_matches = sfmh.findAndMatchFeatures(images[i], images[i+1], 5000)
         print(f"Number of good matched between images {i} and {i+1} = {len(good_matches)}")
         E, src_pts, dst_pts = sfmh.essentialMat(src_pts, dst_pts)
 
         if i==0:
-            P1, P2, TrMat = sfmh.posesFromE(E, src_pts, dst_pts)
+            R, t = sfmh.posesFromE(E, src_pts, dst_pts)
+            TrMat = np.vstack((np.hstack((R, t.reshape(3,1))), np.array([0, 0, 0, 1])))
             pc.camera_poses.append(TrMat)
             pc.gtsam_camera_poses.append(np.linalg.inv(TrMat))
 
+            P1 = np.array(sfmh.K @ pc.camera_poses[i][:3,:])
+            P2 = np.array(sfmh.K @ pc.camera_poses[i+1][:3,:])
+
             pts_3d, src_pts, dst_pts = sfmh.triangulate_pts(P1, P2, src_pts, dst_pts)
-            print(f"{pts_3d[0]}\n{src_pts[0]}\n{dst_pts[0]}")
+            
             pc.addPoints(pts_3d, src_pts, dst_pts, i, i+1)
 
         else:
@@ -462,6 +544,47 @@ def main():
             pts_3d, src_pts, dst_pts = sfmh.triangulate_pts(P1, P2, src_pts, dst_pts)
             pc.addPoints(pts_3d, src_pts, dst_pts, i, i+1)
 
+    # Plot Point Cloud
+    pc.filter_points(90)
+    pts_3d_plot = np.array([point for point in pc.tracks.keys()])
+    print(f"Number of 3D points in the point cloud = {len(pts_3d_plot)}")
+    
+    pcPlot = plotter(pts_3d_plot, pc.gtsam_camera_poses, 4000)
+    pcPlot.plot_3d_o3d(save="initial_point_cloud.ply")
+
+    '''
+    OPTIMIZATION USING GTSAM
+    '''
+    optimizer = gtsam_optimizer(pc, sfmh.K)
+
+    #Initilize the factor graph
+    graph, initial_estimate, L, X = optimizer.initialize_factor_graph()
+    print('Initial Error = {}'.format(graph.error(initial_estimate)))
+
+    # Optimize the graph and get the results
+    result = optimizer.optimize()
+    print('Final Error = {}'.format(graph.error(result)))
+
+    # Plot Optimized point cloud
+    opt_camera_poses = []
+    optimized_pt_cloud = []
+
+    i = 0
+    for point in pc.tracks.keys():
+        optimized_pt_cloud.append(result.atPoint3(L(i)))
+        i+=1
+
+    optimized_poses = []
+    for i in range(len(images)):
+        opt_camera_poses.append(result.atPose3(X(i)).matrix())
+        R = opt_camera_poses[i][:3,:3]
+        T = opt_camera_poses[i][:3,3]
+        Tr = np.hstack((R, T.reshape(3, 1)))
+        optimized_poses.append(Tr)
+
+    print(len(optimized_poses))
+    opt_pcPlot = plotter(np.array(optimized_pt_cloud), np.array(optimized_poses), 400)
+    opt_pcPlot.plot_3d_o3d(save="optimized_point_cloud.ply")
 
 if __name__ == "__main__":
     main()
