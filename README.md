@@ -15,7 +15,7 @@ The SfM pipeline involves the following steps:
 7. **Plotting**: The code has 3 different functions in the plotter class to visualize the point cloud using different libraries. The current implementation uses Open3D which can be easily changed.
 
 ## Results
-
+![Alt text](initial_pcl_with_camera_poses.png?raw=true "Title")
 
 ## Requirements
 
