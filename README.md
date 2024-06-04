@@ -17,15 +17,19 @@ The SfM pipeline involves the following steps:
 ## Results
 The images can be found in ./buddha_images folder. Reference image below:
 
-<img src="buddha_images/buddha_006.png?raw=true" alt="BuddhaImage" width="400">
+<img src="buddha_images/buddha_006.png?raw=true" alt="BuddhaImage" width="300">
 
 
-Initial (un-optimized) point cloud with camera poses (red).
-![Alt text](initial_pcl_with_camera_poses.png?raw=true "Initial_pcl_with_cam_poses")
+Initial (un-optimized) point cloud with camera poses (red):
+
+<img src="initial_pcl_with_camera_poses.png?raw=true" alt="Initial_pcl_with_cam_poses">
+
 Left - Front View; Right - Top View (for better visualization of camera poses)
 
 Optimized point cloud with camera poses (red).
-![Alt text](optimized_pcl_with_camera_poses.png?raw=true "Initial_pcl_with_cam_poses")
+
+<img src="optimized_pcl_with_camera_poses.png?raw=true" alt="Optimized_pcl_with_cam_poses">
+
 Left - Front View; Right - Top View (for better visualization of camera poses)
 
 ## Requirements
