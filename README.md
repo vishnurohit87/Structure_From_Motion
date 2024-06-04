@@ -22,11 +22,11 @@ The images can be found in ./buddha_images folder. Reference image below:
 
 ### Initial (un-optimized) point cloud with camera poses (red):
 <img src="initial_pcl_with_camera_poses.png?raw=true" alt="Initial_pcl_with_cam_poses">
-*** Left - Front View; Right - Top View (for better visualization of camera poses) ***
+_Left - Front View; Right - Top View (for better visualization of camera poses)_
 
 ### Optimized point cloud with camera poses (red).
 <img src="optimized_pcl_with_camera_poses.png?raw=true" alt="Optimized_pcl_with_cam_poses">
-*** Left - Front View; Right - Top View (for better visualization of camera poses) ***
+_Left - Front View; Right - Top View (for better visualization of camera poses)_
 
 ## Requirements
 
