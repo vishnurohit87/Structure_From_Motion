@@ -16,6 +16,7 @@ The SfM pipeline involves the following steps:
 
 ## Results
 The images can be found in ./buddha_images folder. Reference image below:
+
 <img src="buddha_images/buddha_006.png?raw=true" alt="BuddhaImage" width="400">
 
 
